@@ -1,31 +1,3 @@
-/*
- * IRremoteESP8266: IRrecvDumpV2 - dump details of IR codes with IRrecv
- * An IR detector/demodulator must be connected to the input kRecvPin.
- *
- * Copyright 2009 Ken Shirriff, http://arcfn.com
- * Copyright 2017-2019 David Conran
- *
- * Example circuit diagram:
- *  https://github.com/crankyoldgit/IRremoteESP8266/wiki#ir-receiving
- *
- * Changes:
- *   Version 1.2 October, 2020
- *     - Enable easy setting of the decoding tolerance value.
- *   Version 1.0 October, 2019
- *     - Internationalisation (i18n) support.
- *     - Stop displaying the legacy raw timing info.
- *   Version 0.5 June, 2019
- *     - Move A/C description to IRac.cpp.
- *   Version 0.4 July, 2018
- *     - Minor improvements and more A/C unit support.
- *   Version 0.3 November, 2017
- *     - Support for A/C decoding for some protocols.
- *   Version 0.2 April, 2017
- *     - Decode from a copy of the data so we can start capturing faster thus
- *       reduce the likelihood of miscaptures.
- * Based on Ken Shirriff's IrsendDemo Version 0.1 July, 2009,
- */
-
 #include <Arduino.h>
 #include <assert.h>
 #include <IRrecv.h>
@@ -55,12 +27,7 @@ const uint8_t kTolerancePercentage = kTolerance;
 #define LEGACY_TIMING_INFO false
 
 IRrecv irrecv(kRecvPin, kCaptureBufferSize, kTimeout, true);
-decode_results results;  // Somewhere to store the results
-
-int LED1 = 12;
-bool LED1_STATE = false;
-#define LED_PIN 14
-bool LED2_STATE = false;
+decode_results results;
 
 #define FASTLED_ESP8266_RAW_PIN_ORDER
 #define FASTLED_ESP8266_NODEMCU_PIN_ORDER
@@ -68,10 +35,136 @@ bool LED2_STATE = false;
 #define FASTLED_ALL_PINS_HARDWARE_SPI
 
 #include "FastLED.h"
-#define LED_NUM 1
-CRGB leds[LED_NUM];
 
-void setup() {
+CRGB COLORS[] = {
+  CRGB::White, CRGB::Red, CRGB::Chartreuse, CRGB::Coral, CRGB::Crimson, CRGB::DeepSkyBlue, 
+  CRGB::GreenYellow, CRGB::Indigo, CRGB::Magenta, CRGB::Lime, CRGB::MediumSeaGreen, CRGB::MediumPurple, 
+  CRGB::Orange, CRGB::PaleGreen, CRGB::PaleVioletRed, CRGB::Plaid, CRGB::Purple, CRGB::SandyBrown, 
+  CRGB::SkyBlue, CRGB::Tomato, CRGB::Yellow
+};
+#define COLOR_COUNT 21
+
+int brightness = 255;
+bool reset_flag = false;
+
+#define LED_1_PIN 5
+#define LED_1_NUM 1
+bool LED_1_STATE = false;
+int LED_1_COLOR_ID = 0;
+CRGB leds_1[LED_1_NUM];
+
+#define LED_2_PIN 4
+#define LED_2_NUM 1
+bool LED_2_STATE = false;
+int LED_2_COLOR_ID = 0;
+CRGB leds_2[LED_2_NUM];
+
+#define LED_3_PIN 0
+#define LED_3_NUM 1
+bool LED_3_STATE = false;
+int LED_3_COLOR_ID = 0;
+CRGB leds_3[LED_3_NUM];
+
+#define LED_4_PIN 2
+#define LED_4_NUM 1
+bool LED_4_STATE = false;
+int LED_4_COLOR_ID = 0;
+CRGB leds_4[LED_4_NUM];
+
+#define LED_5_PIN 14
+#define LED_5_NUM 1
+bool LED_5_STATE = false;
+int LED_5_COLOR_ID = 0;
+CRGB leds_5[LED_5_NUM];
+
+#define LED_6_PIN 12
+#define LED_6_NUM 1
+bool LED_6_STATE = false;
+int LED_6_COLOR_ID = 0;
+CRGB leds_6[LED_6_NUM];
+
+#define LED_7_PIN 15
+#define LED_7_NUM 1
+bool LED_7_STATE = false;
+int LED_7_COLOR_ID = 0;
+CRGB leds_7[LED_7_NUM];
+
+#define LED_8_PIN 16
+#define LED_8_NUM 1
+bool LED_8_STATE = false;
+int LED_8_COLOR_ID = 0;
+CRGB leds_8[LED_8_NUM];
+
+void my_clear(CRGB *leds, int led_num)
+{
+  for (int i = 0; i < led_num; i++)
+  {
+    leds[i] = CRGB::Black;
+  }
+}
+
+void clear_all()
+{
+  LED_1_STATE = false;
+  LED_1_COLOR_ID = 0;
+  LED_2_STATE = false;
+  LED_2_COLOR_ID = 0;
+  LED_3_STATE = false;
+  LED_3_COLOR_ID = 0;
+  LED_4_STATE = false;
+  LED_4_COLOR_ID = 0;
+  LED_5_STATE = false;
+  LED_5_COLOR_ID = 0;
+  LED_6_STATE = false;
+  LED_6_COLOR_ID = 0;
+  LED_7_STATE = false;
+  LED_7_COLOR_ID = 0;
+  LED_8_STATE = false;
+  LED_8_COLOR_ID = 0;
+
+  FastLED.clear();
+  FastLED.show();
+}
+
+void set_color(CRGB *leds, int led_num, int color_id)
+{
+  for (int i = 0; i < led_num; i++)
+  {
+    leds[i] = COLORS[color_id];
+  }
+}
+
+void change_color_id(int &color_id)
+{
+  color_id = (color_id + 1) % COLOR_COUNT;
+}
+
+void my_led_action(CRGB *leds, int led_num, int &color_id, bool &led_stage)
+{
+  if (reset_flag)
+  {
+    reset_flag = false;
+    color_id = 0;
+    led_stage = true;
+  }
+  else
+    led_stage = !led_stage;
+
+  if (led_stage)
+  {
+    set_color(leds, led_num, color_id);
+  }
+  else
+  {
+    change_color_id(color_id);
+    my_clear(leds, led_num);        
+  }
+
+  FastLED.show();
+}
+
+void setup() 
+{
   #if defined(ESP8266)
     Serial.begin(kBaudRate, SERIAL_8N1, SERIAL_TX_ONLY);
   #else  // ESP8266
@@ -87,66 +180,89 @@ void setup() {
     irrecv.setTolerance(kTolerancePercentage);
     irrecv.enableIRIn();
 
-  pinMode(LED1, OUTPUT);
-  FastLED.addLeds< WS2812, LED_PIN, GRB>(leds, LED_NUM);
+  FastLED.addLeds< WS2812, LED_1_PIN, GRB>(leds_1, LED_1_NUM);
+  FastLED.addLeds< WS2812, LED_2_PIN, GRB>(leds_2, LED_2_NUM);
+  FastLED.addLeds< WS2812, LED_3_PIN, GRB>(leds_3, LED_3_NUM);
+  FastLED.addLeds< WS2812, LED_4_PIN, GRB>(leds_4, LED_4_NUM);
+  FastLED.addLeds< WS2812, LED_5_PIN, GRB>(leds_5, LED_5_NUM);
+  FastLED.addLeds< WS2812, LED_6_PIN, GRB>(leds_6, LED_6_NUM);
+  FastLED.addLeds< WS2812, LED_7_PIN, GRB>(leds_7, LED_7_NUM);
+  FastLED.addLeds< WS2812, LED_8_PIN, GRB>(leds_8, LED_8_NUM);
+
+  clear_all();
 }
 
-void loop() {
-  if (irrecv.decode(&results)) {
+void loop() 
+{
+  if (irrecv.decode(&results)) 
+  {
+    if (results.value == 16761405) // ->
+    {
+      if (brightness < 240)
+        brightness = (brightness + 15) % 255;
+      else if (brightness == 240)
+        brightness = 255;
+      FastLED.setBrightness(brightness);
+      FastLED.show();
+    }
+    if (results.value == 16720605) // <-
+    {
+      if (brightness > 0)
+        brightness = (brightness - 15) % 255;
+      FastLED.setBrightness(brightness);
+      FastLED.show();
+    }
+    if (results.value == 16736925) // стрелка вверх
+    {
+
+    }
+    if (results.value == 16754775) // стрелка вниз
+    {
+
+    }
     if (results.value == 16738455) // 1
     {
-      digitalWrite(LED1, LED1_STATE); 
-      LED1_STATE = !LED1_STATE;
+      my_led_action(leds_1, LED_2_NUM, LED_2_COLOR_ID, LED_2_STATE);
     }
     if (results.value == 16750695) // 2
     {
-      if (LED2_STATE)
-        leds[0] = CRGB::Red;
-      else
-        FastLED.clear();
-
-      FastLED.show();
-      LED2_STATE = !LED2_STATE;
+      my_led_action(leds_2, LED_2_NUM, LED_2_COLOR_ID, LED_2_STATE);
     }
     if (results.value == 16756815) // 3
     {
-      digitalWrite(LED1, LED1_STATE); 
-      LED1_STATE = !LED1_STATE;
+      my_led_action(leds_3, LED_3_NUM, LED_3_COLOR_ID, LED_3_STATE);
     }
     if (results.value == 16724175) // 4
     {
-      digitalWrite(LED1, LED1_STATE); 
-      LED1_STATE = !LED1_STATE;
+      my_led_action(leds_4, LED_4_NUM, LED_4_COLOR_ID, LED_4_STATE);
     }
     if (results.value == 16718055) // 5
     {
-      digitalWrite(LED1, LED1_STATE); 
-      LED1_STATE = !LED1_STATE;
+      my_led_action(leds_5, LED_5_NUM, LED_5_COLOR_ID, LED_5_STATE);
     }
     if (results.value == 16743045) // 6
     {
-      digitalWrite(LED1, LED1_STATE); 
-      LED1_STATE = !LED1_STATE;
+      my_led_action(leds_6, LED_6_NUM, LED_6_COLOR_ID, LED_6_STATE);
     }
     if (results.value == 16716015) // 7
     {
-      digitalWrite(LED1, LED1_STATE); 
-      LED1_STATE = !LED1_STATE;
+      my_led_action(leds_7, LED_7_NUM, LED_7_COLOR_ID, LED_7_STATE);
     }
     if (results.value == 16726215) // 8
     {
-      digitalWrite(LED1, LED1_STATE); 
-      LED1_STATE = !LED1_STATE;
+      my_led_action(leds_8, LED_8_NUM, LED_8_COLOR_ID, LED_8_STATE);
     }
     if (results.value == 16734885) // 9
     {
-      digitalWrite(LED1, LED1_STATE); 
-      LED1_STATE = !LED1_STATE;
+
     }
     if (results.value == 16728765) // *
     {
-      digitalWrite(LED1, LED1_STATE); 
-      LED1_STATE = !LED1_STATE;
+      clear_all();
+    }
+    if (results.value == 16732845) // #
+    {
+      reset_flag = !reset_flag;
     }
     yield();
   }
